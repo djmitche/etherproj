@@ -164,7 +164,9 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     }
 
     // sort by 'when', and use that to define the order
-    tasks.sort(function (a,b) { return a.when - b.when })
+    tasks.sort(function (a,b) {
+        return a.when - b.when || b.duration - a.duration;
+    });
     for (var i = 0; i < ntasks; i++) {
         tasks[i].order = i;
     }
