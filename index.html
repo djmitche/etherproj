@@ -1,14 +1,33 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>WebGantt (dumb name)</title>
-        <link rel="stylesheet" type="text/css" href="css/webgantt.css" />
+        <title>etherproj</title>
+        <link rel="stylesheet" type="text/css" href="css/etherproj.css" />
         <script src="js/deps/load-min.js" type="text/javascript"></script>
         <script type="text/javascript">
-            load("js/deps/d3.js")
-            .thenLoad("js/render.js")
-            .thenRun(function() { render(); })
+            load(
+                "js/deps/d3.js",
+                "js/etherproj.js",
+                "http://code.jquery.com/jquery-1.7.1.min.js",
+                "js/deps/peg-0.6.2.min.js")
+            .thenRun(function() {
+                var proj = new etherproj.Project();
+                proj.display_gantt('#gantt');
+                proj.watch_text('#input', 200);
+                return true;
+            })
         </script>
     </head>
-    <body />
+    <body>
+        <div id="gantt" class="gantt"></div>
+        <div class="input">
+            <textarea id="input">task foo:
+  duration: 5
+
+task bar:
+  duration: 2
+  when: 5
+</textarea>
+        </div>
+    </body>
 </html>

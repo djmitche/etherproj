@@ -1,0 +1,27 @@
+div.gantt {
+    border: thin black solid;
+    padding: 2px;
+    background-color: white;
+    width: 45%;
+    overflow: scroll;
+    float: left;
+}
+
+div.input {
+    border: thin black solid;
+    padding: 2px;
+    background-color: white;
+    width: 45%;
+    height: 400px;
+    float: right;
+}
+
+div.input textarea {
+    width: 100%;
+    height: 100%;
+}
+
+.etherproj-gantt rect {
+    stroke: white;
+    fill: steelblue;
+}
