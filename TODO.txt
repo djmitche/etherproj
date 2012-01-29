@@ -12,7 +12,7 @@ Solving:
     * report constraint loops
 
 Rendering:
-    * show titles
+    * nest title text in rects, for clipping?
 
 UI:
     * scale SVG to graph

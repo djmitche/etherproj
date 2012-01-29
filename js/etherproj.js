@@ -184,6 +184,7 @@ etherproj.Gantt = function(proj, selector) {
     // parameters
     this.row_height = 20;
     this.day_width = 20;
+    this.transition_duration = 500;
 
     this.div = d3.select(selector);
     this.svg = this.div.append("svg")
@@ -197,35 +198,68 @@ etherproj.Gantt.prototype.redraw = function() {
 
     var boxes = self.svg.selectAll("rect")
         .data(self.proj.data.tasks, function(d) { return d.name });
+    var text = self.svg.selectAll("text")
+        .data(self.proj.data.tasks, function(d) { return d.name });
 
     var x_func = function(d) { return d.when * self.day_width; };
     var y_func = function(d) { return d.order * self.row_height; };
     var width_func = function(d) { return d.duration * self.day_width };
+    var text_func = function(d) { return d.title };
     var height = self.row_height - 2;
 
     // enter - fade in
     boxes.enter().insert("rect")
-        .style("fill-opacity", 0)
+        // fixed
+        .attr("height", height)
+        .attr("rx", 3)
+        .attr("ry", 3)
+        // variable
         .attr("x", x_func)
         .attr("y", y_func)
         .attr("width", width_func)
-        .attr("height", height)
+        .style("fill-opacity", 0)
       .transition()
-        .duration(500)
+        .duration(this.transition_duration)
+        .style("fill-opacity", 1.0);
+
+    text.enter().insert("text")
+        // fixed
+        .attr("dx", 3)
+        .attr("dy", self.row_height - 7)
+        // variable
+        .attr("x", x_func)
+        .attr("y", y_func)
+        .attr("class", "task")
+        .text(text_func)
+        .style("fill-opacity", 0)
+      .transition()
+        .duration(this.transition_duration)
         .style("fill-opacity", 1.0);
 
     // update - move to new shape
     boxes.transition()
-        .duration(500)
+        .duration(this.transition_duration)
         .attr("x", x_func)
         .attr("y", y_func)
         .attr("width", width_func)
-        .attr("height", height)
+        .style("fill-opacity", 1.0);
+
+    text.transition()
+        .duration(this.transition_duration)
+        .attr("x", x_func)
+        .attr("y", y_func)
+        .attr("class", "task")
+        .text(text_func)
         .style("fill-opacity", 1.0);
 
     // exit -- fade to nothing
     boxes.exit().transition()
-        .duration(500)
+        .duration(this.transition_duration)
+        .style("fill-opacity", 0)
+        .remove();
+
+    text.exit().transition()
+        .duration(this.transition_duration)
         .style("fill-opacity", 0)
         .remove();
 };

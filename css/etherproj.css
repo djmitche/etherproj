@@ -22,6 +22,11 @@ div.input textarea {
 }
 
 .etherproj-gantt rect {
-    stroke: white;
-    fill: steelblue;
+    stroke: steelblue;
+    fill: lightblue;
+}
+
+.etherproj-gantt text.task {
+    font-family: helvetica;
+    font-size: 8px;
 }
