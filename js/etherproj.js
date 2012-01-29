@@ -42,13 +42,13 @@ etherproj.Project.prototype.display_gantt = function(selector) {
 
 // display based on the given text
 etherproj.Project.prototype.set_text = function(selector) {
-    this.data = etherproj.parse_text(selector);
+    this.data = this.solve(this.parse_text(selector));
     $.each(this.displays, function(i, d) { d.redraw(); }) // TODO: jQuery-ism
 };
 
 // Parser
 
-etherproj.parse_text = function(text) {
+etherproj.Project.prototype.parse_text = function(text) {
     var lines = text.split("\n");
     var nlines = lines.length;
     var tasks = [];
@@ -64,7 +64,6 @@ etherproj.parse_text = function(text) {
 
     for (var i = 0; i < nlines; i++) {
         var line = lines[i];
-        // XXX console.log(line);
 
         // strip comments and skip all-whitespace lines
         line = line.replace(comment_re, '');
@@ -74,13 +73,13 @@ etherproj.parse_text = function(text) {
 
         // check for a new task header
         if (matches = task_re.exec(line)) {
+            var name = etherproj.strip(matches[1]);
             task = {
-                name: matches[1],
-                // defaults
-                title: matches[1],
+                name: name,
+                // default values
+                title: name,
                 duration: 1,
-                when: 0,
-                order: order,
+                constraints: [],
             };
             tasks.push(task)
             order += 1;
@@ -95,22 +94,83 @@ etherproj.parse_text = function(text) {
                 task.title = value;
                 continue;
             } else if (key === 'duration') {
-                task.duration = parseInt(value);
+                task.duration = etherproj.safeParseInt(value, 1);
                 continue;
             } else if (key === 'when') {
                 task.when = parseInt(value);
                 continue;
+            } else if (key === 'after') {
+                task.constraints.push({ type: 'prereq', name: etherproj.strip(value) })
+                continue;
             }
         }
 
-        // TODO: flag this line as an error
+        // TODO: flag this line as an error in the HTML
         console.log("ERROR:", line);
+
         // reset the task so later settings do not apply to the wrong task
         task = null;
     }
 
+    console.log(tasks);
     return {
         tasks: tasks,
+    };
+}
+
+// Solver
+
+etherproj.Project.prototype.solve = function(parsed_data) {
+    var tasks = parsed_data.tasks;
+    var ntasks = parsed_data.tasks.length;
+
+    // get the tasks keyed by name, for easy dependency-finding
+    var by_name = {__proto__:null};
+    for (var i = 0; i < ntasks; i++) {
+        var t = tasks[i];
+        by_name[t.name] = t;
+    }
+
+    // now visit all nodes, using depth-first searching
+    var visit = function(n) {
+        if (n.visited) {
+            return;
+        }
+        n.visited = true;
+
+        // allowed range
+        var earliest = 0;
+
+        // TODO: stack to prevent loops
+
+        // visit constraints
+        var nconst = n.constraints.length;
+        for (var i = 0; i < nconst; i++) {
+            var c = n.constraints[i];
+            if (c.type === 'prereq') {
+                var pq = by_name[c.name];
+                if (pq) {
+                    visit(pq);
+                    earliest = Math.max(earliest, pq.when + pq.duration);
+                } else {
+                    // TODO report error
+                }
+            }
+        }
+        n.when = earliest;
+    }
+    for (var i = 0; i < ntasks; i++) {
+        visit(tasks[i]);
+    }
+
+    // sort by 'when', and use that to define the order
+    tasks.sort(function (a,b) { return a.when - b.when })
+    for (var i = 0; i < ntasks; i++) {
+        tasks[i].order = i;
+    }
+
+    return {
+        tasks: tasks
     };
 }
 
@@ -167,3 +227,17 @@ etherproj.Gantt.prototype.redraw = function() {
         .style("fill-opacity", 0)
         .remove();
 };
+
+// Utilities
+
+etherproj.safeParseInt = function(s, d) {
+    var v = parseInt(s);
+    if (isNaN(v)) {
+        return d;
+    }
+    return v;
+};
+
+etherproj.strip = function(s) {
+    return s.replace(/^\s+|\s+$/g, '');
+}
