@@ -20,12 +20,25 @@
     <body>
         <div id="gantt" class="gantt"></div>
         <div class="input">
-            <textarea id="input">task foo:
-  duration: 5
-
-task bar:
-  duration: 2
-  when: 5
+            <textarea id="input"># Welcome to etherproj!
+#
+# Enter the details of your project here, as a series of stanzas describing
+# options, tasks, and so forth.  Each stanza starts with a line telling what
+# it is describing, followed by a number of settings.
+#
+# Tasks look like this (where all of the settings are optional):
+#
+# task electrical:
+#   title: Electrical
+#   duration: 2
+#   before: drywall
+#   after: framing
+#
+# Each task has a name, which is how other tasks will refer to it.  It can also have
+# a title, which will be displayed in the diagram.  Its duration is given in days, and
+# 'after' and 'before' are used to describe its relationship to other tasks.
+#
+# Now, delete these comments and get started!
 </textarea>
         </div>
     </body>
