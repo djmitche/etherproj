@@ -49,19 +49,56 @@ etherproj.Project.prototype.set_text = function(selector) {
 // Parser
 
 etherproj.Project.prototype.parse_text = function(text) {
-    var lines = text.split("\n");
-    var nlines = lines.length;
-    var tasks = [];
+    var options = {gantt: {}};
+    var options_stanza = function(name) {
+        // TODO: verify this is a valid option stanza name
+        var current_opts = options[name];
 
-    var task_re = new RegExp("^task\\s+(.*):$");
+        return function(setting, value) {
+            // TODO: verify this is a valid value
+            current_opts[setting] = value;
+        };
+    };
+
+    var tasks = [];
+    var task_stanza = function(name) {
+        task = {
+            name: name,
+            // default values
+            title: name,
+            duration: 1,
+            constraints: [],
+        };
+        tasks.push(task)
+
+        return function(setting, value) {
+            if (setting === 'title') {
+                task.title = value;
+            } else if (setting === 'duration') {
+                task.duration = etherproj.safeParseInt(value, 1);
+            } else if (setting === 'when') {
+                task.when = parseInt(value);
+            } else if (setting === 'after') {
+                task.constraints.push({ type: 'prereq', name: etherproj.strip(value) })
+            }
+            // TODO: error handling
+        };
+    };
+
+    var stanza_fns = {
+        options: options_stanza,
+        task: task_stanza,
+    };
+
+    var stanza_re = new RegExp("^(task|options)\\s+(.*):$");
     var setting_re = new RegExp("^\\s+(\\S+)\\s*:\\s*(.*)$");
     var comment_re = new RegExp("#.*$");
     var ws_re = new RegExp("^\\s*$");
 
+    var lines = text.split("\n");
+    var nlines = lines.length;
     var matches;
-    var task;
-    var order = 0;
-
+    var setting_fn;
     for (var i = 0; i < nlines; i++) {
         var line = lines[i];
 
@@ -71,48 +108,28 @@ etherproj.Project.prototype.parse_text = function(text) {
             continue;
         }
 
-        // check for a new task header
-        if (matches = task_re.exec(line)) {
-            var name = etherproj.strip(matches[1]);
-            task = {
-                name: name,
-                // default values
-                title: name,
-                duration: 1,
-                constraints: [],
-            };
-            tasks.push(task)
-            order += 1;
+        // check for a new stanza header
+        if (matches = stanza_re.exec(line)) {
+            var name = etherproj.strip(matches[2]);
+            setting_fn = stanza_fns[matches[1]](name);
             continue;
         }
 
-        // and for settings
-        if (task && (matches = setting_re.exec(line))) {
-            var key = matches[1];
-            var value = matches[2];
-            if (key === 'title') {
-                task.title = value;
-                continue;
-            } else if (key === 'duration') {
-                task.duration = etherproj.safeParseInt(value, 1);
-                continue;
-            } else if (key === 'when') {
-                task.when = parseInt(value);
-                continue;
-            } else if (key === 'after') {
-                task.constraints.push({ type: 'prereq', name: etherproj.strip(value) })
-                continue;
-            }
+        // ..and for settings
+        if (setting_fn && (matches = setting_re.exec(line))) {
+            setting_fn(matches[1], matches[2]);
+            continue;
         }
 
         // TODO: flag this line as an error in the HTML
         console.log("ERROR:", line);
 
         // reset the task so later settings do not apply to the wrong task
-        task = null;
+        setting_fn = null;
     }
 
     console.log(tasks);
+    console.log(options);
     return {
         tasks: tasks,
     };
