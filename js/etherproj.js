@@ -222,12 +222,12 @@ etherproj.Gantt.prototype.redraw = function() {
     var y_func = function(d) { return d.order * self.row_height; };
     var width_func = function(d) { return d.duration * self.day_width };
     var text_func = function(d) { return d.title };
-    var height = self.row_height - 2;
+    var box_height = self.row_height - 2;
 
     // enter - fade in
     boxes.enter().insert("rect")
         // fixed
-        .attr("height", height)
+        .attr("height", box_height)
         .attr("rx", 3)
         .attr("ry", 3)
         // variable
