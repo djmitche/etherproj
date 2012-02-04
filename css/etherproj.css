@@ -21,12 +21,17 @@ div.input textarea {
     height: 100%;
 }
 
-.etherproj-gantt rect {
+svg.etherproj-gantt g.task rect {
     stroke: steelblue;
     fill: lightblue;
 }
 
-.etherproj-gantt text.task {
+svg.etherproj-gantt g.task text {
     font-family: helvetica;
     font-size: 8px;
+}
+
+svg.etherproj-gantt path.conn {
+    stroke: black;
+    fill: none;
 }

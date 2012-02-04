@@ -128,10 +128,9 @@ etherproj.Project.prototype.parse_text = function(text) {
         setting_fn = null;
     }
 
-    console.log(tasks);
-    console.log(options);
     return {
         tasks: tasks,
+        options: options,
     };
 }
 
@@ -147,6 +146,10 @@ etherproj.Project.prototype.solve = function(parsed_data) {
         var t = tasks[i];
         by_name[t.name] = t;
     }
+
+    // connections between tasks, each represented as a tuple of nodes (before,
+    // after)
+    var connections = [];
 
     // now visit all nodes, using depth-first searching
     var visit = function(n) {
@@ -169,6 +172,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
                 if (pq) {
                     visit(pq);
                     earliest = Math.max(earliest, pq.when + pq.duration);
+                    connections.push([pq, n]);
                 } else {
                     // TODO report error
                 }
@@ -189,7 +193,8 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     }
 
     return {
-        tasks: tasks
+        tasks: tasks,
+        connections: connections,
     };
 }
 
@@ -208,15 +213,12 @@ etherproj.Gantt = function(proj, selector) {
          .attr("class", "etherproj-gantt")
          .attr("width", 500)
          .attr("height", 500);
+    this.tasks_g = this.svg.insert('g').attr('class', 'tasks');
+    this.conns_g = this.svg.insert('g').attr('class', 'conns');
 };
 
 etherproj.Gantt.prototype.redraw = function() {
     var self = this;
-
-    var boxes = self.svg.selectAll("rect")
-        .data(self.proj.data.tasks, function(d) { return d.name });
-    var text = self.svg.selectAll("text")
-        .data(self.proj.data.tasks, function(d) { return d.name });
 
     var x_func = function(d) { return d.when * self.day_width; };
     var y_func = function(d) { return d.order * self.row_height; };
@@ -224,8 +226,22 @@ etherproj.Gantt.prototype.redraw = function() {
     var text_func = function(d) { return d.title };
     var box_height = self.row_height - 2;
 
+    var taskgs = self.tasks_g.selectAll("g").filter('.task')
+        .data(self.proj.data.tasks, function(d) { return d.name });
+    var taskgs_enter = taskgs.enter().insert("g")
+        .attr('class', 'task');
+    var taskgs_exit = taskgs.exit();
+
     // enter - fade in
-    boxes.enter().insert("rect")
+    taskgs_enter
+        .style("fill-opacity", 0)
+        .style("stroke-opacity", 0)
+      .transition()
+        .duration(this.transition_duration)
+        .style("fill-opacity", 1.0)
+        .style("stroke-opacity", 1.0);
+
+    taskgs_enter.insert("rect")
         // fixed
         .attr("height", box_height)
         .attr("rx", 3)
@@ -233,51 +249,96 @@ etherproj.Gantt.prototype.redraw = function() {
         // variable
         .attr("x", x_func)
         .attr("y", y_func)
-        .attr("width", width_func)
-        .style("fill-opacity", 0)
-      .transition()
-        .duration(this.transition_duration)
-        .style("fill-opacity", 1.0);
+        .attr("width", width_func);
 
-    text.enter().insert("text")
+    taskgs_enter.insert("text")
         // fixed
         .attr("dx", 3)
         .attr("dy", self.row_height - 7)
         // variable
         .attr("x", x_func)
         .attr("y", y_func)
-        .attr("class", "task")
-        .text(text_func)
-        .style("fill-opacity", 0)
-      .transition()
-        .duration(this.transition_duration)
-        .style("fill-opacity", 1.0);
+        .text(text_func);
 
     // update - move to new shape
-    boxes.transition()
+    taskgs.transition()
+        .duration(this.transition_duration)
+        .style("fill-opacity", 1.0)
+        .style("stroke-opacity", 1.0);
+
+    taskgs.select("rect").transition()
         .duration(this.transition_duration)
         .attr("x", x_func)
         .attr("y", y_func)
         .attr("width", width_func)
-        .style("fill-opacity", 1.0);
 
-    text.transition()
+    taskgs.select("text").transition()
         .duration(this.transition_duration)
         .attr("x", x_func)
         .attr("y", y_func)
-        .attr("class", "task")
         .text(text_func)
-        .style("fill-opacity", 1.0);
+        .style("fill-opacity", 1.0)
+        .style("stroke-opacity", 1.0);
 
-    // exit -- fade to nothing
-    boxes.exit().transition()
+    // exit -- fade taskgs to nothing
+    taskgs_exit.transition()
         .duration(this.transition_duration)
         .style("fill-opacity", 0)
+        .style("stroke-opacity", 0)
         .remove();
 
-    text.exit().transition()
+    var conn_path_fn = function(d) {
+        var before = d[0], after = d[1];
+
+        // Draw a two-segment bezier curve, stopping off at the midpoint
+        // beteween the start and end.  The control points are over the
+        // midpoint, unless the start and end times are the same, in which case
+        // they're one day before/after
+        
+        var bx = (before.when + before.duration) * self.day_width;
+        var by = (before.order + 0.5) * self.row_height;
+        var ax = after.when * self.day_width;
+        var ay = (after.order + 0.5) * self.row_height;
+
+        // halfway point
+        var hx = (ax + bx) / 2;
+        var hy = (ay + by) / 2;
+
+        // and the X coordinate of the control point
+        var cx = hx;
+        if (cx < bx + self.day_width / 2) {
+            cx = bx + self.day_width / 2;
+        } else if (cx > bx + 3 * self.day_width) {
+            cx = bx + 3 * self.day_width;
+        }
+
+        var pt = function(x,y) { return x + "," + y; };
+
+        return "M" + pt(bx,by) + " Q" + pt(cx, by) + " " + pt(hx, hy) + " T" + pt(ax,ay);
+    };
+
+    var conns = self.conns_g.selectAll("path").filter('.conn')
+        .data(self.proj.data.connections, function(d) { return d[0].name + '|' + d[1].name; });
+    var conns_enter = conns.enter().insert("path")
+        .attr('class', 'conn');
+    var conns_exit = conns.exit();
+
+    conns_enter
+        .style("stroke-opacity", 0)
+        .attr('d', conn_path_fn)
+        .attr('name', function(d) { return d[1].name + '|' + d[1].name; })
+      .transition()
         .duration(this.transition_duration)
-        .style("fill-opacity", 0)
+        .style("stroke-opacity", 0.6);
+
+    conns.transition()
+        .duration(this.transition_duration)
+        .attr('d', conn_path_fn)
+        .style("stroke-opacity", 0.6);
+
+    conns_exit.transition()
+        .duration(this.transition_duration)
+        .style("stroke-opacity", 0)
         .remove();
 };
 
