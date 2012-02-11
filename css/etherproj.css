@@ -21,6 +21,21 @@ div.input textarea {
     height: 100%;
 }
 
+svg.etherproj-gantt g.axis path.domain {
+    fill: none;
+    stroke: black;
+}
+
+svg.etherproj-gantt g.axis line {
+    fill: none;
+    stroke: black;
+}
+
+svg.etherproj-gantt g.axis text {
+    font-family: helvetica;
+    font-size: 8px;
+}
+
 svg.etherproj-gantt g.task rect {
     stroke: steelblue;
     fill: lightblue;
