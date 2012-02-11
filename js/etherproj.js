@@ -75,9 +75,11 @@ etherproj.Project.prototype.parse_text = function(text) {
             if (setting === 'title') {
                 task.title = value;
             } else if (setting === 'duration') {
+                // TODO: assumes days as unit
                 task.duration = etherproj.safeParseInt(value, 1);
             } else if (setting === 'when') {
-                task.when = parseInt(value);
+                task.when = Date.parse(value);
+                // TODO: error handling
             } else if (setting === 'after') {
                 task.constraints.push({ type: 'prereq', name: etherproj.strip(value) })
             }
@@ -151,6 +153,8 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     // after)
     var connections = [];
 
+    var start = Date.today();
+
     // now visit all nodes, using depth-first searching
     var visit = function(n) {
         if (n.visited) {
@@ -159,7 +163,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
         n.visited = true;
 
         // allowed range
-        var earliest = 0;
+        var earliest = n.when || start.clone();
 
         // TODO: stack to prevent loops
 
@@ -171,7 +175,9 @@ etherproj.Project.prototype.solve = function(parsed_data) {
                 var pq = by_name[c.name];
                 if (pq) {
                     visit(pq);
-                    earliest = Math.max(earliest, pq.when + pq.duration);
+                    if (earliest.compareTo(pq.end) < 0) {
+                        earliest = pq.end;
+                    }
                     connections.push([pq, n]);
                 } else {
                     // TODO report error
@@ -179,6 +185,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
             }
         }
         n.when = earliest;
+        n.end = earliest.clone().add(n.duration).days();
     }
     for (var i = 0; i < ntasks; i++) {
         visit(tasks[i]);
@@ -188,6 +195,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     tasks.sort(function (a,b) {
         return a.when - b.when || b.duration - a.duration;
     });
+
     for (var i = 0; i < ntasks; i++) {
         tasks[i].order = i;
     }
@@ -221,20 +229,20 @@ etherproj.Gantt.prototype.redraw = function() {
     var self = this;
 
     // X axis scales along available dates
-    var min_date = d3.min(self.proj.data.tasks, function(d) { return d.when; });
-    var max_date = d3.max(self.proj.data.tasks, function(d) { return d.when + d.duration; });
-    var x = d3.scale.linear().domain([min_date, max_date]).range([0, self.width]);
-    var day_width = x(1) - x(0);
+    var ms_per_day = 1000 * 3600 * 24;
+    var min_date = new Date(d3.min(self.proj.data.tasks, function(d) { return +(d.when); }));
+    var max_date = new Date(d3.max(self.proj.data.tasks, function(d) { return +(d.end); }));
+    var x = d3.time.scale().domain([min_date, max_date]).range([0, self.width]);
 
     // Y axis is based on task order
     var max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; });
     var y = d3.scale.linear().domain([0, max_order]).range([0, self.row_height * max_order]);
 
-    self.redraw_tasks(x, day_width, y);
-    self.redraw_conns(x, day_width, y);
+    self.redraw_tasks(x, y);
+    self.redraw_conns(x, y);
 };
 
-etherproj.Gantt.prototype.redraw_tasks = function(x,  day_width, y) {
+etherproj.Gantt.prototype.redraw_tasks = function(x,  y) {
     var self = this;
 
     var task_x = function(d) { return x(d.when); };
@@ -242,7 +250,7 @@ etherproj.Gantt.prototype.redraw_tasks = function(x,  day_width, y) {
 
     var box_height = self.row_height - 2;
     var text_func = function(d) { return d.title };
-    var width_func = function(d) { return d.duration * day_width };
+    var width_func = function(d) { return x(d.end) - x(d.when); };
 
     var taskgs = self.tasks_g.selectAll("g").filter('.task')
         .data(self.proj.data.tasks, function(d) { return d.name });
@@ -302,7 +310,7 @@ etherproj.Gantt.prototype.redraw_tasks = function(x,  day_width, y) {
         .remove();
 };
 
-etherproj.Gantt.prototype.redraw_conns = function(x,  day_width, y) {
+etherproj.Gantt.prototype.redraw_conns = function(x,  y) {
     var self = this;
 
     var conn_path_fn = function(d) {
@@ -311,9 +319,10 @@ etherproj.Gantt.prototype.redraw_conns = function(x,  day_width, y) {
         // Draw a two-segment bezier curve, stopping off at the midpoint
         // beteween the start and end.  The control points are over the
         // midpoint, unless the start and end times are the same, in which case
-        // they're one day before/after
+        // they're a few units before/after
+        var few_units = 15;
         
-        var bx = x(before.when + before.duration);
+        var bx = x(before.end);
         var by = y(before.order + 0.5);
         var ax = x(after.when);
         var ay = y(after.order + 0.5);
@@ -324,10 +333,10 @@ etherproj.Gantt.prototype.redraw_conns = function(x,  day_width, y) {
 
         // and the X coordinate of the control point
         var cx = hx;
-        if (cx < bx + day_width / 2) {
-            cx = bx + day_width / 2;
-        } else if (cx > bx + 3 * day_width) {
-            cx = bx + 3 * day_width;
+        if (cx < bx + few_units / 2) {
+            cx = bx + few_units / 2;
+        } else if (cx > bx + 3 * few_units) {
+            cx = bx + 3 * few_units;
         }
 
         var pt = function(x,y) { return x + "," + y; };
@@ -344,7 +353,6 @@ etherproj.Gantt.prototype.redraw_conns = function(x,  day_width, y) {
     conns_enter
         .style("stroke-opacity", 0)
         .attr('d', conn_path_fn)
-        .attr('name', function(d) { return d[1].name + '|' + d[1].name; })
       .transition()
         .duration(this.transition_duration)
         .style("stroke-opacity", 0.6);
