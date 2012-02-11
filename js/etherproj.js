@@ -200,6 +200,8 @@ etherproj.Project.prototype.solve = function(parsed_data) {
         tasks[i].order = i;
     }
 
+    console.log(tasks);
+
     return {
         tasks: tasks,
         connections: connections,
@@ -232,12 +234,23 @@ etherproj.Gantt.prototype.redraw = function() {
     var self = this;
 
     // X axis scales along available dates
-    var min_date = new Date(d3.min(self.proj.data.tasks, function(d) { return +(d.when); }));
-    var max_date = new Date(d3.max(self.proj.data.tasks, function(d) { return +(d.end); }));
+    var min_date, max_date;
+    if (self.proj.data.tasks.length > 1) {
+        min_date = new Date(d3.min(self.proj.data.tasks, function(d) { return +(d.when); }));
+        max_date = new Date(d3.max(self.proj.data.tasks, function(d) { return +(d.end); }));
+    } else {
+        min_date = Date.parse('yesterday');
+        max_date = Date.parse('tomorrow');
+    }
     var x = d3.time.scale().domain([min_date, max_date]).range([0, self.width]);
 
     // Y axis is based on task order
-    var max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; });
+    var max_order;
+    if (self.proj.data.tasks.length > 0) {
+        max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; });
+    } else {
+        max_order = 1;
+    }
     var y = d3.scale.linear().domain([0, max_order]).range([0, self.row_height * max_order]);
 
     self.redraw_axis(x, y);
