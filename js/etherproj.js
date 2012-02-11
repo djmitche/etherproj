@@ -262,7 +262,9 @@ etherproj.Gantt.prototype.redraw_axis = function(x,  y) {
     var self = this;
     var axis = d3.svg.axis().scale(x).ticks(this.width / 50).tickSize(4, 2, 0);
 
-    this.axis_g.call(axis);
+    this.axis_g.transition()
+        .duration(self.transition_duration)
+        .call(axis);
 }
 
 etherproj.Gantt.prototype.redraw_tasks = function(x,  y) {
