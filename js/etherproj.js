@@ -200,8 +200,6 @@ etherproj.Project.prototype.solve = function(parsed_data) {
         tasks[i].order = i;
     }
 
-    console.log(tasks);
-
     return {
         tasks: tasks,
         connections: connections,

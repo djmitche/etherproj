@@ -2,8 +2,6 @@ div.gantt {
     border: thin black solid;
     padding: 2px;
     background-color: white;
-    //width: 45%;
-    //overflow: scroll;
     float: left;
 }
 
