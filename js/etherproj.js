@@ -205,14 +205,14 @@ etherproj.Gantt = function(proj, selector) {
 
     // parameters
     this.row_height = 20;
-    this.day_width = 20;
     this.transition_duration = 500;
+    this.width = 500;
 
     this.div = d3.select(selector);
     this.svg = this.div.append("svg")
          .attr("class", "etherproj-gantt")
-         .attr("width", 500)
-         .attr("height", 500);
+         .attr("width", this.width)
+         .attr("height", this.height);
     this.tasks_g = this.svg.insert('g').attr('class', 'tasks');
     this.conns_g = this.svg.insert('g').attr('class', 'conns');
 };
@@ -220,17 +220,56 @@ etherproj.Gantt = function(proj, selector) {
 etherproj.Gantt.prototype.redraw = function() {
     var self = this;
 
-    var x_func = function(d) { return d.when * self.day_width; };
-    var y_func = function(d) { return d.order * self.row_height; };
-    var width_func = function(d) { return d.duration * self.day_width };
-    var text_func = function(d) { return d.title };
+    // X axis scales along available dates
+    var min_date = d3.min(self.proj.data.tasks, function(d) { return d.when; });
+    var max_date = d3.max(self.proj.data.tasks, function(d) { return d.when + d.duration; });
+    var x = d3.scale.linear().domain([min_date, max_date]).range([0, self.width]);
+    var day_width = x(1) - x(0);
+
+    // Y axis is based on task order
+    var max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; });
+    var y = d3.scale.linear().domain([0, max_order]).range([0, self.row_height * max_order]);
+
+    self.redraw_tasks(x, day_width, y);
+    self.redraw_conns(x, day_width, y);
+};
+
+etherproj.Gantt.prototype.redraw_tasks = function(x,  day_width, y) {
+    var self = this;
+
+    var task_x = function(d) { return x(d.when); };
+    var task_y = function(d) { return y(d.order); };
+
     var box_height = self.row_height - 2;
+    var text_func = function(d) { return d.title };
+    var width_func = function(d) { return d.duration * day_width };
 
     var taskgs = self.tasks_g.selectAll("g").filter('.task')
         .data(self.proj.data.tasks, function(d) { return d.name });
     var taskgs_enter = taskgs.enter().insert("g")
         .attr('class', 'task');
     var taskgs_exit = taskgs.exit();
+
+    // functions to set/update values on each shape
+    var box_fn = function(sel, include_fixed) {
+        if (include_fixed) {
+            sel .attr("height", box_height)
+                .attr("rx", 3)
+                .attr("ry", 3);
+        }
+        sel .attr("x", task_x)
+            .attr("y", task_y)
+            .attr("width", width_func);
+    };
+    var text_fn = function(sel, include_fixed) {
+        if (include_fixed) {
+            sel .attr("dx", 3)
+                .attr("dy", self.row_height - 7);
+        }
+        sel .attr("x", task_x)
+            .attr("y", task_y)
+            .text(text_func);
+    };
 
     // enter - fade in
     taskgs_enter
@@ -241,24 +280,8 @@ etherproj.Gantt.prototype.redraw = function() {
         .style("fill-opacity", 1.0)
         .style("stroke-opacity", 1.0);
 
-    taskgs_enter.insert("rect")
-        // fixed
-        .attr("height", box_height)
-        .attr("rx", 3)
-        .attr("ry", 3)
-        // variable
-        .attr("x", x_func)
-        .attr("y", y_func)
-        .attr("width", width_func);
-
-    taskgs_enter.insert("text")
-        // fixed
-        .attr("dx", 3)
-        .attr("dy", self.row_height - 7)
-        // variable
-        .attr("x", x_func)
-        .attr("y", y_func)
-        .text(text_func);
+    box_fn(taskgs_enter.insert("rect"), true);
+    text_fn(taskgs_enter.insert("text"), true);
 
     // update - move to new shape
     taskgs.transition()
@@ -266,26 +289,21 @@ etherproj.Gantt.prototype.redraw = function() {
         .style("fill-opacity", 1.0)
         .style("stroke-opacity", 1.0);
 
-    taskgs.select("rect").transition()
-        .duration(this.transition_duration)
-        .attr("x", x_func)
-        .attr("y", y_func)
-        .attr("width", width_func)
+    box_fn(taskgs.select("rect").transition()
+            .duration(this.transition_duration));
+    text_fn(taskgs.select("text").transition()
+        .duration(this.transition_duration));
 
-    taskgs.select("text").transition()
-        .duration(this.transition_duration)
-        .attr("x", x_func)
-        .attr("y", y_func)
-        .text(text_func)
-        .style("fill-opacity", 1.0)
-        .style("stroke-opacity", 1.0);
-
-    // exit -- fade taskgs to nothing
+    // exit -- fade taskgs to nothing and remove
     taskgs_exit.transition()
         .duration(this.transition_duration)
         .style("fill-opacity", 0)
         .style("stroke-opacity", 0)
         .remove();
+};
+
+etherproj.Gantt.prototype.redraw_conns = function(x,  day_width, y) {
+    var self = this;
 
     var conn_path_fn = function(d) {
         var before = d[0], after = d[1];
@@ -295,10 +313,10 @@ etherproj.Gantt.prototype.redraw = function() {
         // midpoint, unless the start and end times are the same, in which case
         // they're one day before/after
         
-        var bx = (before.when + before.duration) * self.day_width;
-        var by = (before.order + 0.5) * self.row_height;
-        var ax = after.when * self.day_width;
-        var ay = (after.order + 0.5) * self.row_height;
+        var bx = x(before.when + before.duration);
+        var by = y(before.order + 0.5);
+        var ax = x(after.when);
+        var ay = y(after.order + 0.5);
 
         // halfway point
         var hx = (ax + bx) / 2;
@@ -306,10 +324,10 @@ etherproj.Gantt.prototype.redraw = function() {
 
         // and the X coordinate of the control point
         var cx = hx;
-        if (cx < bx + self.day_width / 2) {
-            cx = bx + self.day_width / 2;
-        } else if (cx > bx + 3 * self.day_width) {
-            cx = bx + 3 * self.day_width;
+        if (cx < bx + day_width / 2) {
+            cx = bx + day_width / 2;
+        } else if (cx > bx + 3 * day_width) {
+            cx = bx + 3 * day_width;
         }
 
         var pt = function(x,y) { return x + "," + y; };
