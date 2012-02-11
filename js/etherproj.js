@@ -49,14 +49,33 @@ etherproj.Project.prototype.set_text = function(selector) {
 // Parser
 
 etherproj.Project.prototype.parse_text = function(text) {
-    var options = {gantt: {}};
+    var options = {
+        gantt: {
+            start: Date.today(),
+            day_width: 50,
+        },
+    };
     var options_stanza = function(name) {
         // TODO: verify this is a valid option stanza name
         var current_opts = options[name];
 
         return function(setting, value) {
-            // TODO: verify this is a valid value
-            current_opts[setting] = value;
+            if (setting == "start") {
+                var new_start = Date.parse(value);
+                if (new_start) {
+                    current_opts.start = new_start;
+                } else {
+                    // TODO: error handling
+                }
+            } else if (setting == "day-width") {
+                var new_width = etherproj.safeParseInt(value, 1);
+                if (new_width) {
+                    current_opts.day_width = new_width;
+                } else {
+                    // TODO: error handling
+                }
+            }
+            // TODO: error handling
         };
     };
 
@@ -77,7 +96,7 @@ etherproj.Project.prototype.parse_text = function(text) {
             } else if (setting === 'duration') {
                 // TODO: assumes days as unit
                 task.duration = etherproj.safeParseInt(value, 1);
-            } else if (setting === 'when') {
+            } else if (setting === 'when') { // TODO: remove
                 task.when = Date.parse(value);
                 // TODO: error handling
             } else if (setting === 'after') {
@@ -153,7 +172,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     // after)
     var connections = [];
 
-    var start = Date.today();
+    var start = parsed_data.options.gantt.start;
 
     // now visit all nodes, using depth-first searching
     var visit = function(n) {
@@ -203,6 +222,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     return {
         tasks: tasks,
         connections: connections,
+        options: parsed_data.options,
     };
 }
 
@@ -216,6 +236,7 @@ etherproj.Gantt = function(proj, selector) {
     this.axis_height = 18;
     this.axis_padding = 20;
     this.day_width = 50;
+    this.tick_width = 50;
     this.transition_duration = 500;
 
     this.div = d3.select(selector);
@@ -235,6 +256,9 @@ etherproj.Gantt = function(proj, selector) {
 
 etherproj.Gantt.prototype.redraw = function() {
     var self = this;
+
+    // update from options
+    self.day_width = self.proj.data.options.gantt.day_width;
 
     // calculate minima and maxima from the data
     var min_date, max_date;
@@ -279,7 +303,7 @@ etherproj.Gantt.prototype.redraw = function() {
 
 etherproj.Gantt.prototype.redraw_axis = function(x,  y, content_width) {
     var self = this;
-    var axis = d3.svg.axis().scale(x).ticks(content_width / self.day_width).tickSize(4, 2, 0);
+    var axis = d3.svg.axis().scale(x).ticks(content_width / self.tick_width).tickSize(4, 2, 0);
 
     this.axis_g.transition()
         .duration(self.transition_duration)
