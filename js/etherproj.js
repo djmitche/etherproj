@@ -215,17 +215,22 @@ etherproj.Gantt = function(proj, selector) {
 
     // parameters
     this.row_height = 20;
+    this.axis_height = 18;
+    this.axis_padding = 20;
+    this.day_width = 50;
     this.transition_duration = 500;
-    this.width = 500;
 
-    this.div = d3.select(selector)
-        .attr("width", this.width);
+    this.div = d3.select(selector);
     this.svg = this.div.append("svg")
          .attr("class", "etherproj-gantt")
-         .attr("width", this.width);
-    this.axis_g = this.svg.insert('g').attr('class', 'axis');
+         .attr("width", this.day_width * 2 + 2 * this.axis_padding)
+         .attr("height", this.axis_height + this.row_height)
+         .attr("fill-opacity", 0)
+         .attr("stroke-opacity", 0);
+    this.axis_g = this.svg.insert('g').attr('class', 'axis')
+        .attr('transform', 'translate(' + this.axis_padding + ', 0)');
     this.content_g = this.svg.insert('g')
-        .attr('transform', 'translate(0, 18)'); // move content down
+        .attr('transform', 'translate(' + this.axis_padding + ', ' + this.axis_height + ')');
     this.tasks_g = this.content_g.insert('g').attr('class', 'tasks');
     this.conns_g = this.content_g.insert('g').attr('class', 'conns');
 };
@@ -233,7 +238,7 @@ etherproj.Gantt = function(proj, selector) {
 etherproj.Gantt.prototype.redraw = function() {
     var self = this;
 
-    // X axis scales along available dates
+    // calculate minima and maxima from the data
     var min_date, max_date;
     if (self.proj.data.tasks.length > 1) {
         min_date = new Date(d3.min(self.proj.data.tasks, function(d) { return +(d.when); }));
@@ -242,25 +247,41 @@ etherproj.Gantt.prototype.redraw = function() {
         min_date = Date.parse('yesterday');
         max_date = Date.parse('tomorrow');
     }
-    var x = d3.time.scale().domain([min_date, max_date]).range([0, self.width]);
 
-    // Y axis is based on task order
     var max_order;
     if (self.proj.data.tasks.length > 0) {
-        max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; });
+        max_order = d3.max(self.proj.data.tasks, function(d) { return d.order; }) + 1;
     } else {
         max_order = 1;
     }
+
+    // Calculate new height and width
+    var content_width = self.day_width * (max_date - min_date) / (1000 * 3600 * 24);
+    var svg_width = content_width + 2 * self.axis_padding;
+    var svg_height = self.axis_height + self.row_height * max_order;
+
+    // X axis scales along available dates
+    var x = d3.time.scale().domain([min_date, max_date]).range([0, content_width]);
+
+    // Y axis is based on task order
     var y = d3.scale.linear().domain([0, max_order]).range([0, self.row_height * max_order]);
 
-    self.redraw_axis(x, y);
-    self.redraw_tasks(x, y);
-    self.redraw_conns(x, y);
+    // animate the SVG that new size
+    this.svg.transition()
+        .duration(self.transition_duration)
+        .attr("width", svg_width)
+        .attr("height", svg_height)
+        .attr("stroke-opacity", 1.0)
+        .attr("fill-opacity", 1.0);
+
+    self.redraw_axis(x, y, content_width);
+    self.redraw_tasks(x, y, content_width);
+    self.redraw_conns(x, y, content_width);
 };
 
-etherproj.Gantt.prototype.redraw_axis = function(x,  y) {
+etherproj.Gantt.prototype.redraw_axis = function(x,  y, content_width) {
     var self = this;
-    var axis = d3.svg.axis().scale(x).ticks(this.width / 50).tickSize(4, 2, 0);
+    var axis = d3.svg.axis().scale(x).ticks(content_width / self.day_width).tickSize(4, 2, 0);
 
     this.axis_g.transition()
         .duration(self.transition_duration)
