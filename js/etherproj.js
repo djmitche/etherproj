@@ -67,7 +67,7 @@ etherproj.Project.prototype.parse_text = function(text) {
                 } else {
                     // TODO: error handling
                 }
-            } else if (setting == "day-width") {
+            } else if (setting == "day width") {
                 var new_width = etherproj.safeParseInt(value, 1);
                 if (new_width) {
                     current_opts.day_width = new_width;
