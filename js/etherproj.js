@@ -96,11 +96,28 @@ etherproj.Project.prototype.parse_text = function(text) {
             } else if (setting === 'duration') {
                 // TODO: assumes days as unit
                 task.duration = etherproj.safeParseInt(value, 1);
-            } else if (setting === 'when') { // TODO: remove
-                task.when = Date.parse(value);
-                // TODO: error handling
             } else if (setting === 'after') {
-                task.constraints.push({ type: 'prereq', name: etherproj.strip(value) })
+                var date = Date.parse(value);
+                if (date) {
+                    task.constraints.push({ type: 'after-date', date: date })
+                } else {
+                    task.constraints.push({ type: 'after-task', name: etherproj.strip(value) })
+                }
+            } else if (setting === 'before') {
+                var date = Date.parse(value);
+                if (date) {
+                    task.constraints.push({ type: 'before-date', date: date })
+                } else {
+                    task.constraints.push({ type: 'before-task', name: etherproj.strip(value) })
+                }
+            } else if (setting === 'finish by') {
+                var date = Date.parse(value);
+                if (date) {
+                    task.constraints.push({ type: 'finish-before-date', date: date })
+                } else {
+                    // 'finish by' and 'before' mean the same for a task
+                    task.constraints.push({ type: 'before-task', name: etherproj.strip(value) })
+                }
             }
             // TODO: error handling
         };
@@ -112,7 +129,7 @@ etherproj.Project.prototype.parse_text = function(text) {
     };
 
     var stanza_re = new RegExp("^(task|options)\\s+(.*):$");
-    var setting_re = new RegExp("^\\s+(\\S+)\\s*:\\s*(.*)$");
+    var setting_re = new RegExp("^\\s+([^:]+)\\s*:\\s*(.*)$");
     var comment_re = new RegExp("#.*$");
     var ws_re = new RegExp("^\\s*$");
 
@@ -138,7 +155,7 @@ etherproj.Project.prototype.parse_text = function(text) {
 
         // ..and for settings
         if (setting_fn && (matches = setting_re.exec(line))) {
-            setting_fn(matches[1], matches[2]);
+            setting_fn(etherproj.strip(matches[1]), etherproj.strip(matches[2]));
             continue;
         }
 
@@ -166,45 +183,69 @@ etherproj.Project.prototype.solve = function(parsed_data) {
     for (var i = 0; i < ntasks; i++) {
         var t = tasks[i];
         by_name[t.name] = t;
+        // TODO: detect collisions
+    }
+
+    // convert all "before-task" into the reverse "after-task"
+    for (var i = 0; i < ntasks; i++) {
+        var t = tasks[i];
+        var nconst = t.constraints.length;
+        for (var j = 0; j < nconst; j++) {
+            var c = t.constraints[j];
+            if (c.type == 'before-task') {
+                var remote = by_name[c.name];
+                if (remote) {
+                    remote.constraints.push({ type: 'after-task', name: t.name });
+                }
+                // TODO: error handling
+            }
+        }
     }
 
     // connections between tasks, each represented as a tuple of nodes (before,
     // after)
     var connections = [];
 
-    var start = parsed_data.options.gantt.start;
+    var default_start = parsed_data.options.gantt.start;
 
     // now visit all nodes, using depth-first searching
-    var visit = function(n) {
-        if (n.visited) {
+    var visit = function(t) {
+        if (t.visited) {
             return;
         }
-        n.visited = true;
+        t.visited = true;
 
         // allowed range
-        var earliest = n.when || start.clone();
+        var earliest_start = t.when || default_start.clone();
+        var latest_finish = null;
 
         // TODO: stack to prevent loops
 
         // visit constraints
-        var nconst = n.constraints.length;
+        var nconst = t.constraints.length;
         for (var i = 0; i < nconst; i++) {
-            var c = n.constraints[i];
-            if (c.type === 'prereq') {
+            var c = t.constraints[i];
+            // c.type == before-task was handled in the loop above
+            if (c.type === 'after-task') {
                 var pq = by_name[c.name];
                 if (pq) {
                     visit(pq);
-                    if (earliest.compareTo(pq.end) < 0) {
-                        earliest = pq.end;
+                    if (earliest_start.compareTo(pq.end) < 0) {
+                        earliest_start = pq.end;
                     }
-                    connections.push([pq, n]);
+                    connections.push([pq, t]);
                 } else {
                     // TODO report error
                 }
+            } else if (c.type == 'after-date') {
+                var when = c.date;
+                if (earliest_start.compareTo(when) < 0) {
+                    earliest_start = when;
+                }
             }
         }
-        n.when = earliest;
-        n.end = earliest.clone().add(n.duration).days();
+        t.when = earliest_start;
+        t.end = earliest_start.clone().add(t.duration).days();
     }
     for (var i = 0; i < ntasks; i++) {
         visit(tasks[i]);
