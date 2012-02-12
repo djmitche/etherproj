@@ -104,20 +104,7 @@ etherproj.Project.prototype.parse_text = function(text) {
                     task.constraints.push({ type: 'after-task', name: etherproj.strip(value) })
                 }
             } else if (setting === 'before') {
-                var date = Date.parse(value);
-                if (date) {
-                    task.constraints.push({ type: 'before-date', date: date })
-                } else {
-                    task.constraints.push({ type: 'before-task', name: etherproj.strip(value) })
-                }
-            } else if (setting === 'finish by') {
-                var date = Date.parse(value);
-                if (date) {
-                    task.constraints.push({ type: 'finish-before-date', date: date })
-                } else {
-                    // 'finish by' and 'before' mean the same for a task
-                    task.constraints.push({ type: 'before-task', name: etherproj.strip(value) })
-                }
+                task.constraints.push({ type: 'before-task', name: etherproj.strip(value) })
             }
             // TODO: error handling
         };
@@ -217,7 +204,7 @@ etherproj.Project.prototype.solve = function(parsed_data) {
 
         // allowed range
         var earliest_start = t.when || default_start.clone();
-        var latest_finish = null;
+        var latest_start = null;
 
         // TODO: stack to prevent loops
 
